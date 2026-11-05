@@ -16,16 +16,14 @@ template <class t> struct Vec3 {
     // 向量点乘 (用来算夹角和投影)
     t operator*(const Vec3<t> &v) const { return x * v.x + y * v.y + z * v.z; }
     // 求向量长度的平方
-   
+    Vec3<t> operator*(const t &scalar) const { return Vec3<t>(x * scalar, y * scalar, z * scalar); }
     t norm() const { return x * x + y * y + z * z; }
-    
+    // ⚠️ 新加的：向量乘以一个标量数字
     // 新增：向量归一化 (把长度变成1)
     Vec3<t> normalize() const {
         t len = std::sqrt(norm());
         return Vec3<t>(x / len, y / len, z / len);
     }
 };
-
 typedef Vec3<float> Vec3f;
-
 #endif // GEOMETRY_H
