@@ -4,6 +4,9 @@
 
 本项目是我在**学习计算机图形学原理**的过程中，参考经典教程 **ssloy/tinyraytracer** 一步步手动敲写并复现的成果。在这个过程中，我不仅跑通了渲染流程，还独立解决了一些跨平台的兼容性问题，并对其进行了扩展。
 
+## 致谢
+- 感谢原作者 ssloy 提供的优秀教程：**[tinyraytracer](https://github.com/ssloy/tinyraytracer)**
+
 ## 目前实现的功能
 - [x] 成功将渲染结果输出为 PPM 格式的二进制图片
 - [x] 实现了基础的三维向量数学运算（加减法、点乘、归一化等）
@@ -24,6 +27,3 @@
 ```bash
 g++ main.cpp -o raytracer
 ./raytracer
-
-## 致谢
-- 感谢原作者 ssloy 提供的优秀教程：**[tinyraytracer](https://github.com/ssloy/tinyraytracer)**
