@@ -24,3 +24,6 @@
 ```bash
 g++ main.cpp -o raytracer
 ./raytracer
+
+## 致谢
+- 感谢原作者 ssloy 提供的优秀教程：**[tinyraytracer](https://github.com/ssloy/tinyraytracer)**
