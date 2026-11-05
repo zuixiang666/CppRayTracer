@@ -54,11 +54,11 @@ float y = -(2 * (j + 0.5) / (float)height - 1) * tan(M_PI / 6.0);
             
             // 3. 检测光线是否打中球
             if (sphere.ray_intersect(Vec3f(0, 0, 0), dir, t0)) {
-                // 如果打中了，涂红色
-                framebuffer[i + j * width] = Vec3f(1.0, 0.0, 0.0);
+                // 如果打中了，涂色
+                framebuffer[i + j * width] = Vec3f(0.2, 0.2, 0.2);
             } else {
-                // 如果没打中，涂背景色（深灰色，方便看清球）
-                framebuffer[i + j * width] = Vec3f(0.2, 0.2, 0.2); 
+                // 如果没打中，涂背景色
+                framebuffer[i + j * width] = Vec3f(0.4, 0.6, 1.0); 
             }
         }
     }
