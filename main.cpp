@@ -5,14 +5,15 @@
 #include <limits>
 #include "geometry.h"
 
-// 1. 定义材质结构
+// 1. 升级材质：增加了高光指数和反射率
 struct Material {
-    Vec3f diffuse_color; // 漫反射颜色
-    Material(const Vec3f &color) : diffuse_color(color) {}
-    Material() : diffuse_color() {}
+    Material(const Vec2f &a, const Vec3f &color, const float &spec) : albedo(a), diffuse_color(color), specular_exponent(spec) {}
+    Material() : albedo(1, 0), diffuse_color(), specular_exponent() {}
+    Vec2f albedo;             // 反射率 (x: 漫反射比例, y: 镜面高光比例)
+    Vec3f diffuse_color;      // 漫反射颜色
+    float specular_exponent;  // 高光指数 (越大高光越集中)
 };
 
-// 2. 定义球体结构 (现在球有了自己的材质)
 struct Sphere {
     Vec3f center;
     float radius;
@@ -34,19 +35,22 @@ struct Sphere {
     }
 };
 
-// 3. 定义光源结构
 struct Light {
     Light(const Vec3f &p, const float &i) : position(p), intensity(i) {}
     Vec3f position;
     float intensity;
 };
 
-// 4. 核心渲染函数：计算光线打中球后的颜色
+// 2. 新增：计算光线反射方向的函数
+Vec3f reflect(const Vec3f &I, const Vec3f &N) {
+    return I - N * 2.0f * (I * N);
+}
+
+// 3. 升级渲染函数：加入高光计算
 Vec3f cast_ray(const Vec3f &orig, const Vec3f &dir, const std::vector<Sphere> &spheres, const std::vector<Light> &lights) {
     float closest_t = std::numeric_limits<float>::max();
     int hit_index = -1;
 
-    // 找最近的球
     for (size_t k = 0; k < spheres.size(); k++) {
         float t0;
         if (spheres[k].ray_intersect(orig, dir, t0)) {
@@ -57,30 +61,33 @@ Vec3f cast_ray(const Vec3f &orig, const Vec3f &dir, const std::vector<Sphere> &s
         }
     }
 
-    // 如果没打中任何球，返回背景色
     if (hit_index == -1) {
-        return Vec3f(0.2, 0.2, 0.2); 
+        return Vec3f(0.2, 0.7, 0.8); // 背景色改成了好看的天蓝色
     }
 
-    // 计算交点坐标
     Vec3f point = orig + dir * closest_t;
-    // 计算交点处的法向量 (球心指向交点)
     Vec3f N = (point - spheres[hit_index].center).normalize();
+    Material material = spheres[hit_index].material;
 
-    // 计算光照强度（核心逻辑）
     float diffuse_light_intensity = 0;
+    float specular_light_intensity = 0; // 新增：高光强度
+
     for (size_t i = 0; i < lights.size(); i++) {
-        // 从交点指向光源的方向
         Vec3f light_dir = (lights[i].position - point).normalize();
-        // 点乘：夹角越小越亮。用 max 防止出现负数（背光面）
+
+        // 漫反射
         diffuse_light_intensity += lights[i].intensity * std::max(0.0f, light_dir * N);
+        
+        // 镜面高光：计算反射光与视线方向（-dir）的夹角
+        specular_light_intensity += powf(std::max(0.0f, -reflect(-light_dir, N) * dir), material.specular_exponent) * lights[i].intensity;
     }
 
-    // 最终颜色 = 材质颜色 * 光照强度
-    return spheres[hit_index].material.diffuse_color * diffuse_light_intensity;
+    // 最终颜色 = 漫反射颜色 * 漫反射强度 * 比例 + 高光白色 * 高光强度 * 比例
+    return material.diffuse_color * diffuse_light_intensity * material.albedo[0] + 
+           Vec3f(1., 1., 1.) * specular_light_intensity * material.albedo[1];
 }
 
-void render() {
+void render(const std::vector<Sphere> &spheres, const std::vector<Light> &lights) {
     const int width  = 1024;
     const int height = 768;
     const float aspect_ratio = (float)width / (float)height;
@@ -88,45 +95,49 @@ void render() {
     
     std::vector<Vec3f> framebuffer(width * height);
 
-    // 创建材质和球体
-    Material ivory(Vec3f(0.4, 0.4, 0.3)); // 象牙白材质
-    Material red_rubber(Vec3f(0.3, 0.1, 0.1)); // 红色橡胶材质
-    Material blue(Vec3f(0.1, 0.2, 0.8)); // 蓝色材质
-
-    std::vector<Sphere> spheres;
-    spheres.push_back(Sphere(Vec3f(-3, 0, -16), 2, ivory));
-    spheres.push_back(Sphere(Vec3f(-1.0, -1.5, -12), 2, red_rubber));
-    spheres.push_back(Sphere(Vec3f( 1.5, -0.5, -18), 3, blue));
-
-    // 创建一个光源：位置在 (-20, 20, 20)，强度为 1.5
-    std::vector<Light> lights;
-    lights.push_back(Light(Vec3f(-20, 20,  20), 1.5));
-
-    // 遍历每个像素
     for (size_t j = 0; j < height; j++) {
         for (size_t i = 0; i < width; i++) {
             float x = (2 * (i + 0.5) / (float)width - 1) * aspect_ratio * tan(PI / 6.0);
             float y = -(2 * (j + 0.5) / (float)height - 1) * tan(PI / 6.0);
             Vec3f dir = Vec3f(x, y, -1).normalize(); 
-
-            // 发射光线并获取颜色
             framebuffer[i + j * width] = cast_ray(Vec3f(0, 0, 0), dir, spheres, lights);
         }
     }
 
-    // 保存文件
     std::ofstream ofs;
     ofs.open("./out.ppm", std::ios::binary);
     ofs << "P6\n" << width << " " << height << "\n255\n";
     for (size_t i = 0; i < height * width; ++i) {
-        ofs << (char)(255 * std::max(0.f, std::min(1.f, framebuffer[i].x)));
-        ofs << (char)(255 * std::max(0.f, std::min(1.f, framebuffer[i].y)));
-        ofs << (char)(255 * std::max(0.f, std::min(1.f, framebuffer[i].z)));
+        Vec3f &c = framebuffer[i];
+        
+        // 4. 新增：色调映射 (防止过曝变纯白)
+        float max = std::max(c[0], std::max(c[1], c[2]));
+        if (max > 1) c = c * (1. / max);
+        
+        for (size_t j = 0; j < 3; ++j) {
+            ofs << (char)(255 * std::max(0.f, std::min(1.f, framebuffer[i][j])));
+        }
     }
     ofs.close();
 }
 
 int main() {
-    render();
+    // 创建材质：albedo(漫反射比例, 高光比例), 颜色, 高光指数
+    Material ivory(Vec2f(0.6, 0.3), Vec3f(0.4, 0.4, 0.3), 50.);
+    Material red_rubber(Vec2f(0.9, 0.1), Vec3f(0.3, 0.1, 0.1), 10.);
+    Material blue(Vec2f(0.6, 0.3), Vec3f(0.1, 0.2, 0.8), 50.);
+
+    std::vector<Sphere> spheres;
+    spheres.push_back(Sphere(Vec3f(-3, 0, -16), 3, ivory));
+    spheres.push_back(Sphere(Vec3f(-1.0, -1.5, -12), 2, red_rubber));
+    spheres.push_back(Sphere(Vec3f( -6.0, -0.5, -18), 3, blue)); 
+
+    // 添加三个光源
+    std::vector<Light> lights;
+    lights.push_back(Light(Vec3f(-20, 20, 20), 1.5));
+    lights.push_back(Light(Vec3f(30, 50, -25), 1.8));
+    lights.push_back(Light(Vec3f(30, 20, 30), 1.7));
+
+    render(spheres, lights);
     return 0;
 }
