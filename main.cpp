@@ -3,6 +3,7 @@
 #include <vector>
 #include <cmath>
 #include <limits>
+#include<cstdlib>
 #include "geometry.h"
 
 // 1. 材质升级：albedo 现在需要 3 个参数（漫反射、高光、反射率）
@@ -105,12 +106,32 @@ void render(const std::vector<Sphere> &spheres, const std::vector<Light> &lights
     
     std::vector<Vec3f> framebuffer(width * height);
 
+        // 循环遍历每个像素
     for (size_t j = 0; j < height; j++) {
         for (size_t i = 0; i < width; i++) {
-            float x = (2 * (i + 0.5) / (float)width - 1) * aspect_ratio * tan(PI / 6.0);
-            float y = -(2 * (j + 0.5) / (float)height - 1) * tan(PI / 6.0);
-            Vec3f dir = Vec3f(x, y, -1).normalize(); 
-            framebuffer[i + j * width] = cast_ray(Vec3f(0, 0, 0), dir, spheres, lights);
+            
+            Vec3f final_color(0, 0, 0); 
+            int samples = 64; // ⚠️ 采样次数：4意味着 2x2=4 条光线（想要更平滑可以改成 16，但会变慢）
+            int sqrt_samples = (int)sqrt(samples);
+
+            // 在一个像素内部，再分成几份去采样
+            for (int m = 0; m < sqrt_samples; m++) {
+                for (int n = 0; n < sqrt_samples; n++) {
+                    // 计算偏移量，不再是死死盯住中心 0.5，而是在像素内部随机游走
+                    float dx = (m + (float)rand() / RAND_MAX) / sqrt_samples;
+                    float dy = (n + (float)rand() / RAND_MAX) / sqrt_samples;
+
+                    float x = (2 * (i + dx) / (float)width - 1) * aspect_ratio * tan(PI / 6.0);
+                    float y = -(2 * (j + dy) / (float)height - 1) * aspect_ratio * tan(PI / 6.0);
+                    Vec3f dir = Vec3f(x, y, -1).normalize(); 
+                    
+                    // 把这 4 条光线的颜色加起来
+                    final_color = final_color + cast_ray(Vec3f(0, 0, 0), dir, spheres, lights);
+                }
+            }
+            
+            // 取平均值，存入画板
+            framebuffer[i + j * width] = final_color * (1.0f / samples);
         }
     }
 
@@ -136,7 +157,7 @@ int main() {
 
     std::vector<Sphere> spheres;
     spheres.push_back(Sphere(Vec3f(-3, 0, -16), 2, ivory));
-    spheres.push_back(Sphere(Vec3f(-1.0, -1.5, -12), 2, red_rubber));
+    spheres.push_back(Sphere(Vec3f(-0.5, -0.5, -12), 2, red_rubber));
     // 把蓝球换成一面“镜子”
     spheres.push_back(Sphere(Vec3f( 1.5, 2.0, -18), 3, mirror));
 
