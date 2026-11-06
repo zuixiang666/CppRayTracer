@@ -150,17 +150,19 @@ void render(const std::vector<Sphere> &spheres, const std::vector<Light> &lights
 }
 
 int main() {
-    // 5. 材质升级：albedo 传入 3 个数，最后一个数字越大，反射（像镜子）越强
-    Material ivory(Vec3f(0.6, 0.3, 0.1), Vec3f(0.4, 0.4, 0.3), 50.);
-    Material red_rubber(Vec3f(0.9, 0.1, 0.0), Vec3f(0.3, 0.1, 0.1), 10.); // 红球不反射
-    Material mirror(Vec3f(0.0, 10.0, 0.8), Vec3f(0.5, 0.5, 0.5), 1425.); // ⚠️ 新增一个镜子材质
-
+        // 1. 材质调优：让玻璃更透亮，高光更强
+    // 参数：[漫反射比例, 高光比例, 反射比例], 颜色, 高光指数
+    Material      ivory(Vec3f(0.6,  0.3, 0.1), Vec3f(0.4, 0.4, 0.3),   50.);
+    Material red_rubber(Vec3f(0.9,  0.1, 0.0), Vec3f(0.3, 0.1, 0.1),   10.);
+    Material     mirror(Vec3f(0.0, 10.0, 0.8), Vec3f(1.0, 1.0, 1.0), 1425.);
     std::vector<Sphere> spheres;
-    spheres.push_back(Sphere(Vec3f(-3, 0, -16), 2, ivory));
-    spheres.push_back(Sphere(Vec3f(-0.5, -0.5, -12), 2, red_rubber));
-    // 把蓝球换成一面“镜子”
-    spheres.push_back(Sphere(Vec3f( 1.5, 2.0, -18), 3, mirror));
+    
+    spheres.push_back(Sphere(Vec3f(-3,    0,   -16), 2,      ivory));
+    spheres.push_back(Sphere(Vec3f(-1.0, -1.5, -12), 2,      mirror));
+    spheres.push_back(Sphere(Vec3f( 1.5, -0.5, -18), 3, red_rubber));
+    spheres.push_back(Sphere(Vec3f( 7,    5,   -18), 4,     mirror));
 
+    // 3. 光源位置（不变）
     std::vector<Light> lights;
     lights.push_back(Light(Vec3f(-20, 20, 20), 1.5));
     lights.push_back(Light(Vec3f(30, 50, -25), 1.8));
