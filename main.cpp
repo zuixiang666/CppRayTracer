@@ -45,7 +45,19 @@ struct Light {
 Vec3f reflect(const Vec3f &I, const Vec3f &N) {
     return I - N * 2.0f * (I * N);
 }
-
+bool scene_intersect(const Vec3f &orig, const Vec3f &dir, const std::vector<Sphere> &spheres, Vec3f &hit, Vec3f &N, Material &material) {
+    float spheres_dist = std::numeric_limits<float>::max();
+    for (size_t i = 0; i < spheres.size(); i++) {
+        float dist_i;
+        if (spheres[i].ray_intersect(orig, dir, dist_i) && dist_i < spheres_dist) {
+            spheres_dist = dist_i;
+            hit = orig + dir * dist_i;
+            N = (hit - spheres[i].center).normalize();
+            material = spheres[i].material;
+        }
+    }
+    return spheres_dist < 1000;
+}
 // 3. 升级渲染函数：加入高光计算
 Vec3f cast_ray(const Vec3f &orig, const Vec3f &dir, const std::vector<Sphere> &spheres, const std::vector<Light> &lights) {
     float closest_t = std::numeric_limits<float>::max();
@@ -74,6 +86,13 @@ Vec3f cast_ray(const Vec3f &orig, const Vec3f &dir, const std::vector<Sphere> &s
 
     for (size_t i = 0; i < lights.size(); i++) {
         Vec3f light_dir = (lights[i].position - point).normalize();
+        float light_distance = (lights[i].position - point).norm();
+
+        Vec3f shadow_orig = light_dir*N < 0 ? point - N*1e-3 : point + N*1e-3; // checking if the point lies in the shadow of the lights[i]
+        Vec3f shadow_pt, shadow_N;
+        Material tmpmaterial;
+        if (scene_intersect(shadow_orig, light_dir, spheres, shadow_pt, shadow_N, tmpmaterial) && (shadow_pt-shadow_orig).norm() < light_distance)
+            continue;
 
         // 漫反射
         diffuse_light_intensity += lights[i].intensity * std::max(0.0f, light_dir * N);
