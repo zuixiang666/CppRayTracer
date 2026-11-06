@@ -122,7 +122,7 @@ void render(const std::vector<Sphere> &spheres, const std::vector<Light> &lights
                     float dy = (n + (float)rand() / RAND_MAX) / sqrt_samples;
 
                     float x = (2 * (i + dx) / (float)width - 1) * aspect_ratio * tan(PI / 6.0);
-                    float y = -(2 * (j + dy) / (float)height - 1) * aspect_ratio * tan(PI / 6.0);
+                    float y = -(2 * (j + dy) / (float)height - 1) * tan(PI / 6.0);
                     Vec3f dir = Vec3f(x, y, -1).normalize(); 
                     
                     // 把这 4 条光线的颜色加起来
