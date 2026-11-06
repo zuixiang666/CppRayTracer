@@ -68,7 +68,19 @@ bool scene_intersect(const Vec3f &orig, const Vec3f &dir, const std::vector<Sphe
             material = spheres[i].material;
         }
     }
-    return spheres_dist < 1000;
+    float checkerboard_dist = std::numeric_limits<float>::max();
+    if (fabs(dir.y)>1e-3)  {
+        float d = -(orig.y+4)/dir.y; // the checkerboard plane has equation y = -4
+        Vec3f pt = orig + dir*d;
+        if (d>0 && fabs(pt.x)<10 && pt.z<-10 && pt.z>-30 && d<spheres_dist) {
+            checkerboard_dist = d;
+            hit = pt;
+            N = Vec3f(0,1,0);
+            material.diffuse_color = (int(.5*hit.x+1000) + int(.5*hit.z)) & 1 ? Vec3f(1,1,1) : Vec3f(1, .7, .3);
+            material.diffuse_color = material.diffuse_color*.3;
+        }
+    }
+    return std::min(spheres_dist, checkerboard_dist)<1000;
 }
 
 // 2. 核心改动：cast_ray 增加了一个递归深度 depth 参数，默认值为 0
