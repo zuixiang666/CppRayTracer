@@ -43,5 +43,31 @@ template <class t> struct Vec3 {
 
 typedef Vec3<float> Vec3f;
 typedef Vec3<float> Vec2f;
+// 新增：定义四维向量 Vec4
+// 用来存储 4 个材质比例：漫反射、高光、反射、折射
+template <class t> struct Vec4 {
+    t x, y, z, w;
+    Vec4() : x(0), y(0), z(0), w(0) {}
+    Vec4(t xx, t yy, t zz, t ww) : x(xx), y(yy), z(zz), w(ww) {}
+    
+    // 向量乘标量
+    Vec4<t> operator*(const t &scalar) const { return Vec4<t>(x * scalar, y * scalar, z * scalar, w * scalar); }
+    
+    // 下标访问
+    t& operator[](size_t i) {
+        if (i == 0) return x;
+        if (i == 1) return y;
+        if (i == 2) return z;
+        return w;
+    }
+    const t& operator[](size_t i) const {
+        if (i == 0) return x;
+        if (i == 1) return y;
+        if (i == 2) return z;
+        return w;
+    }
+};
+
+typedef Vec4<float> Vec4f; // 定义 Vec4f
 
 #endif // GEOMETRY_H
