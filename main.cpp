@@ -35,7 +35,38 @@ struct Sphere {
         return true;
     }
 };
+// ⚠️ 新加的：AABB 正方体/长方体
+struct Box {
+    Vec3f min, max;
+    Material material;
 
+    Box(const Vec3f &m1, const Vec3f &m2, const Material &m) : min(m1), max(m2), material(m) {}
+
+    bool ray_intersect(const Vec3f &orig, const Vec3f &dir, float &t0) const {
+        // 极简版的 AABB 求交 (Slab Method)
+        // 加上 1e-6 防止除以 0 的崩溃
+        float tx1 = (min.x - orig.x) / (dir.x == 0 ? 1e-6 : dir.x);
+        float tx2 = (max.x - orig.x) / (dir.x == 0 ? 1e-6 : dir.x);
+        float tmin = std::min(tx1, tx2);
+        float tmax = std::max(tx1, tx2);
+
+        float ty1 = (min.y - orig.y) / (dir.y == 0 ? 1e-6 : dir.y);
+        float ty2 = (max.y - orig.y) / (dir.y == 0 ? 1e-6 : dir.y);
+        tmin = std::max(tmin, std::min(ty1, ty2));
+        tmax = std::min(tmax, std::max(ty1, ty2));
+
+        float tz1 = (min.z - orig.z) / (dir.z == 0 ? 1e-6 : dir.z);
+        float tz2 = (max.z - orig.z) / (dir.z == 0 ? 1e-6 : dir.z);
+        tmin = std::max(tmin, std::min(tz1, tz2));
+        tmax = std::min(tmax, std::max(tz1, tz2));
+
+        if (tmax < 0 || tmin > tmax) return false;
+        t0 = tmin < 0 ? tmax : tmin;
+        return true;
+    }
+};
+Material my_box_mat(1.0, Vec4f(0.8, 0.6, 0.1, 0.0), Vec3f(0.8, 0.6, 0.2), 150.); 
+std::vector<Box> boxes; 
 struct Light {
     Light(const Vec3f &p, const float &i) : position(p), intensity(i) {}
     Vec3f position;
@@ -66,6 +97,23 @@ bool scene_intersect(const Vec3f &orig, const Vec3f &dir, const std::vector<Sphe
             hit = orig + dir * dist_i;
             N = (hit - spheres[i].center).normalize();
             material = spheres[i].material;
+        }
+    }
+       // ⚠️ 遍历检测所有的正方体
+    for (size_t i = 0; i < boxes.size(); i++) {
+        float box_dist = std::numeric_limits<float>::max();
+        if (boxes[i].ray_intersect(orig, dir, box_dist) && box_dist < spheres_dist) {
+            spheres_dist = box_dist;
+            hit = orig + dir * box_dist;
+            
+            // 算正方体的法线
+            Vec3f center = (boxes[i].min + boxes[i].max) * 0.5;
+            Vec3f d = hit - center;
+            if (fabs(d.x) > fabs(d.y) && fabs(d.x) > fabs(d.z)) N = Vec3f(d.x > 0 ? 1 : -1, 0, 0);
+            else if (fabs(d.y) > fabs(d.z)) N = Vec3f(0, d.y > 0 ? 1 : -1, 0);
+            else N = Vec3f(0, 0, d.z > 0 ? 1 : -1);
+
+            material = boxes[i].material;
         }
     }
     float checkerboard_dist = std::numeric_limits<float>::max();
@@ -184,6 +232,7 @@ int main() {
     Material     mirror(1.0, Vec4f(0.0, 10.0, 0.8, 0.0), Vec3f(1.0, 1.0, 1.0), 1425.);
     std::vector<Sphere> spheres;
     
+    boxes.push_back(Box(Vec3f(-1, -1, -10), Vec3f(1, 1, -8), my_box_mat));
     spheres.push_back(Sphere(Vec3f(-3,    0,   -16), 2,      ivory));
     spheres.push_back(Sphere(Vec3f(-1.0, -1.5, -12), 2,      glass));
     spheres.push_back(Sphere(Vec3f( 1.5, -0.5, -18), 3, red_rubber));
