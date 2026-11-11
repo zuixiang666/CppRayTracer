@@ -62,6 +62,41 @@ struct Box {
         return true;
     }
 };
+struct Cylinder {
+    Vec3f center; // ⚠️ 新增：圆柱体的中心点
+    float radius;
+    Material material;
+
+    Cylinder(const Vec3f &c, float r, const Material &m) : center(c), radius(r), material(m) {}
+
+    bool ray_intersect(const Vec3f &orig, const Vec3f &dir, float &t0) const {
+        // 将光线的起点平移到圆柱体的局部坐标系
+        Vec3f oc = orig - center; 
+
+        // 光线在 XZ 平面上的投影
+        float a = dir.x * dir.x + dir.z * dir.z;
+        float b = 2.0f * (oc.x * dir.x + oc.z * dir.z);
+        float c = oc.x * oc.x + oc.z * oc.z - radius * radius;
+
+        float delta = b * b - 4 * a * c;
+        if (delta < 0) return false; // 没打中
+
+        float t1 = (-b - sqrtf(delta)) / (2.0f * a);
+        float t2 = (-b + sqrtf(delta)) / (2.0f * a);
+
+        // 取最近的正数解
+        if (t1 > 0) t0 = t1;
+        else if (t2 > 0) t0 = t2;
+        else return false;
+
+        return true;
+    }
+};
+
+// 全局变量
+std::vector<Cylinder> cylinders;
+// 给它一个青色磨砂材质
+Material cyl_mat(1.0, Vec4f(0.7, 0.2, 0.1, 0.0), Vec3f(0.2, 0.8, 0.8), 100.);
 // 漫反射0.7，高光0.3，反射率0.1（有一点点反光，但绝不透明）
 Material my_box_mat(1.0, Vec4f(0.7, 0.3, 0.1, 0.0), Vec3f(0.9, 0.7, 0.4), 150.);
 std::vector<Box> boxes; 
@@ -110,6 +145,20 @@ bool scene_intersect(const Vec3f &orig, const Vec3f &dir, const std::vector<Sphe
             else N = Vec3f(0, 0, d.z > 0 ? 1 : -1);
 
             material = boxes[i].material;
+        }
+    }
+      // ⚠️ 检测圆柱体
+    for (size_t i = 0; i < cylinders.size(); i++) {
+        float cyl_dist = std::numeric_limits<float>::max();
+        if (cylinders[i].ray_intersect(orig, dir, cyl_dist) && cyl_dist < spheres_dist) {
+            spheres_dist = cyl_dist;
+            hit = orig + dir * cyl_dist;
+            
+            // ⚠️ 新的法线计算：只算 X 和 Z，减去中心点
+            Vec3f local_hit = hit - cylinders[i].center;
+            N = Vec3f(local_hit.x, 0, local_hit.z).normalize();
+            
+            material = cylinders[i].material;
         }
     }
     float checkerboard_dist = std::numeric_limits<float>::max();
@@ -228,7 +277,7 @@ int main() {
     Material     mirror(1.0, Vec4f(0.0, 10.0, 0.8, 0.0), Vec3f(1.0, 1.0, 1.0), 1425.);
     std::vector<Sphere> spheres;
     
-    // 往右挪(2到5)，往下挪(-2到1)，往深了放(-12到-9)
+    cylinders.push_back(Cylinder(Vec3f(-4.5f, 0.0f, -13.0f), 1.2f, cyl_mat));
     boxes.push_back(Box(Vec3f(2.0, -2.0, -12.0), Vec3f(5.0, 1.0, -9.0), my_box_mat));
     spheres.push_back(Sphere(Vec3f(-3,    0,   -16), 2,      ivory));
     spheres.push_back(Sphere(Vec3f(-1.0, -1.5, -12), 2,      glass));
