@@ -35,47 +35,25 @@ struct Sphere {
         return true;
     }
 };
-// ⚠️ 新加的：AABB 正方体/长方体
 struct Box {
     Vec3f min, max;
     Material material;
-    float angle; // ⚠️ 新增：旋转角度
 
-    Box(const Vec3f &m1, const Vec3f &m2, const Material &m, float a=0) : min(m1), max(m2), material(m), angle(a) {}
+    Box(const Vec3f &m1, const Vec3f &m2, const Material &m) : min(m1), max(m2), material(m) {}
 
     bool ray_intersect(const Vec3f &orig, const Vec3f &dir, float &t0) const {
-        // 障眼法：把光线绕着 Y 轴反向旋转，这样方块看起来就是转过去的
-        Vec3f center = (min + max) * 0.5;
-        Vec3f local_orig = orig - center;
-        
-        float cos_a = cosf(angle);
-        float sin_a = sinf(angle);
-        
-        // 2D旋转矩阵反转
-        Vec3f rot_orig(
-            local_orig.x * cos_a - local_orig.z * sin_a,
-            local_orig.y,
-            local_orig.x * sin_a + local_orig.z * cos_a
-        );
-        Vec3f rot_dir(
-            dir.x * cos_a - dir.z * sin_a,
-            dir.y,
-            dir.x * sin_a + dir.z * cos_a
-        );
-
-        // 用旋转后的局部坐标去测原来的 AABB
-        float tx1 = (min.x - center.x - rot_orig.x) / (rot_dir.x == 0 ? 1e-6 : rot_dir.x);
-        float tx2 = (max.x - center.x - rot_orig.x) / (rot_dir.x == 0 ? 1e-6 : rot_dir.x);
+        float tx1 = (min.x - orig.x) / (dir.x == 0 ? 1e-6 : dir.x);
+        float tx2 = (max.x - orig.x) / (dir.x == 0 ? 1e-6 : dir.x);
         float tmin = std::min(tx1, tx2);
         float tmax = std::max(tx1, tx2);
 
-        float ty1 = (min.y - center.y - rot_orig.y) / (rot_dir.y == 0 ? 1e-6 : rot_dir.y);
-        float ty2 = (max.y - center.y - rot_orig.y) / (rot_dir.y == 0 ? 1e-6 : rot_dir.y);
+        float ty1 = (min.y - orig.y) / (dir.y == 0 ? 1e-6 : dir.y);
+        float ty2 = (max.y - orig.y) / (dir.y == 0 ? 1e-6 : dir.y);
         tmin = std::max(tmin, std::min(ty1, ty2));
         tmax = std::min(tmax, std::max(ty1, ty2));
 
-        float tz1 = (min.z - center.z - rot_orig.z) / (rot_dir.z == 0 ? 1e-6 : rot_dir.z);
-        float tz2 = (max.z - center.z - rot_orig.z) / (rot_dir.z == 0 ? 1e-6 : rot_dir.z);
+        float tz1 = (min.z - orig.z) / (dir.z == 0 ? 1e-6 : dir.z);
+        float tz2 = (max.z - orig.z) / (dir.z == 0 ? 1e-6 : dir.z);
         tmin = std::max(tmin, std::min(tz1, tz2));
         tmax = std::min(tmax, std::max(tz1, tz2));
 
@@ -84,7 +62,8 @@ struct Box {
         return true;
     }
 };
-Material my_box_mat(1.0, Vec4f(0.2, 1.0, 0.8, 0.0), Vec3f(0.9, 0.8, 0.5), 900.); 
+// 漫反射0.7，高光0.3，反射率0.1（有一点点反光，但绝不透明）
+Material my_box_mat(1.0, Vec4f(0.7, 0.3, 0.1, 0.0), Vec3f(0.9, 0.7, 0.4), 150.);
 std::vector<Box> boxes; 
 struct Light {
     Light(const Vec3f &p, const float &i) : position(p), intensity(i) {}
@@ -118,30 +97,17 @@ bool scene_intersect(const Vec3f &orig, const Vec3f &dir, const std::vector<Sphe
             material = spheres[i].material;
         }
     }
-       // 遍历检测所有的正方体
-    for (size_t i = 0; i < boxes.size(); i++) {
+        for (size_t i = 0; i < boxes.size(); i++) {
         float box_dist = std::numeric_limits<float>::max();
         if (boxes[i].ray_intersect(orig, dir, box_dist) && box_dist < spheres_dist) {
             spheres_dist = box_dist;
             hit = orig + dir * box_dist;
             
-            // 算正方体的法线
             Vec3f center = (boxes[i].min + boxes[i].max) * 0.5;
             Vec3f d = hit - center;
-            
-            // 算出局部法线
             if (fabs(d.x) > fabs(d.y) && fabs(d.x) > fabs(d.z)) N = Vec3f(d.x > 0 ? 1 : -1, 0, 0);
             else if (fabs(d.y) > fabs(d.z)) N = Vec3f(0, d.y > 0 ? 1 : -1, 0);
             else N = Vec3f(0, 0, d.z > 0 ? 1 : -1);
-            
-            // ⚠️ 把法线也转回去！
-            float cos_a = cosf(boxes[i].angle);
-            float sin_a = sinf(boxes[i].angle);
-            N = Vec3f(
-                N.x * cos_a + N.z * sin_a,
-                N.y,
-                -N.x * sin_a + N.z * cos_a
-            );
 
             material = boxes[i].material;
         }
@@ -262,7 +228,8 @@ int main() {
     Material     mirror(1.0, Vec4f(0.0, 10.0, 0.8, 0.0), Vec3f(1.0, 1.0, 1.0), 1425.);
     std::vector<Sphere> spheres;
     
-    boxes.push_back(Box(Vec3f(1, -2, -12), Vec3f(4, 1, -9), my_box_mat, 3.14159265f / 4.0f));
+    // 往右挪(2到5)，往下挪(-2到1)，往深了放(-12到-9)
+    boxes.push_back(Box(Vec3f(2.0, -2.0, -12.0), Vec3f(5.0, 1.0, -9.0), my_box_mat));
     spheres.push_back(Sphere(Vec3f(-3,    0,   -16), 2,      ivory));
     spheres.push_back(Sphere(Vec3f(-1.0, -1.5, -12), 2,      glass));
     spheres.push_back(Sphere(Vec3f( 1.5, -0.5, -18), 3, red_rubber));
