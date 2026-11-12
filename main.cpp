@@ -63,40 +63,70 @@ struct Box {
     }
 };
 struct Cylinder {
-    Vec3f center; // ⚠️ 新增：圆柱体的中心点
-    float radius;
+    Vec3f center;     // 圆柱体的中心点 (Y轴的中心)
+    float radius;     // 半径
+    float half_height;// 高度的一半 (从中心到盖子的距离)
     Material material;
 
-    Cylinder(const Vec3f &c, float r, const Material &m) : center(c), radius(r), material(m) {}
+    Cylinder(const Vec3f &c, float r, float h, const Material &m) 
+        : center(c), radius(r), half_height(h), material(m) {}
+
+    // 专门用于求光线与圆盘（盖子）的交点
+    bool intersect_disk(const Vec3f &orig, const Vec3f &dir, float disk_y, float &t) const {
+        if (fabs(dir.y) < 1e-6) return false; // 光线平行于盖子
+        t = (disk_y - orig.y) / dir.y;
+        if (t < 0) return false; // 交点在背后
+        
+        // 检查交点是否在圆盘半径内
+        Vec3f p = orig + dir * t;
+        return (p.x - center.x)*(p.x - center.x) + (p.z - center.z)*(p.z - center.z) <= radius * radius;
+    }
 
     bool ray_intersect(const Vec3f &orig, const Vec3f &dir, float &t0) const {
-        // 将光线的起点平移到圆柱体的局部坐标系
-        Vec3f oc = orig - center; 
+        float min_y = center.y - half_height;
+        float max_y = center.y + half_height;
+        float closest_t = std::numeric_limits<float>::max();
+        bool hit = false;
 
-        // 光线在 XZ 平面上的投影
+        // 1. 检测侧面（无限长圆柱逻辑）
+        Vec3f oc = orig - center;
         float a = dir.x * dir.x + dir.z * dir.z;
         float b = 2.0f * (oc.x * dir.x + oc.z * dir.z);
         float c = oc.x * oc.x + oc.z * oc.z - radius * radius;
-
         float delta = b * b - 4 * a * c;
-        if (delta < 0) return false; // 没打中
 
-        float t1 = (-b - sqrtf(delta)) / (2.0f * a);
-        float t2 = (-b + sqrtf(delta)) / (2.0f * a);
+        if (delta > 0) {
+            float t1 = (-b - sqrtf(delta)) / (2.0f * a);
+            float t2 = (-b + sqrtf(delta)) / (2.0f * a);
+            // 检查侧面的交点 Y 坐标是否在高度范围内
+            if (t1 > 0 && (orig.y + dir.y * t1) >= min_y && (orig.y + dir.y * t1) <= max_y) {
+                closest_t = t1; hit = true;
+            }
+            if (t2 > 0 && (orig.y + dir.y * t2) >= min_y && (orig.y + dir.y * t2) <= max_y) {
+                if (t2 < closest_t) { closest_t = t2; hit = true; }
+            }
+        }
 
-        // 取最近的正数解
-        if (t1 > 0) t0 = t1;
-        else if (t2 > 0) t0 = t2;
-        else return false;
+        // 2. 检测下底面
+        float t_bottom;
+        if (intersect_disk(orig, dir, min_y, t_bottom) && t_bottom < closest_t) {
+            closest_t = t_bottom; hit = true;
+        }
 
-        return true;
+        // 3. 检测上顶面
+        float t_top;
+        if (intersect_disk(orig, dir, max_y, t_top) && t_top < closest_t) {
+            closest_t = t_top; hit = true;
+        }
+
+        if (hit) t0 = closest_t;
+        return hit;
     }
 };
 
 // 全局变量
 std::vector<Cylinder> cylinders;
-// 给它一个青色磨砂材质
-Material cyl_mat(1.0, Vec4f(0.7, 0.2, 0.1, 0.0), Vec3f(0.2, 0.8, 0.8), 100.);
+Material cyl_mat(1.0, Vec4f(0.9, 0.1, 0.0, 0.0), Vec3f(0.7, 0.5, 0.5), 10.);
 // 漫反射0.7，高光0.3，反射率0.1（有一点点反光，但绝不透明）
 Material my_box_mat(1.0, Vec4f(0.7, 0.3, 0.1, 0.0), Vec3f(0.9, 0.7, 0.4), 150.);
 std::vector<Box> boxes; 
@@ -147,16 +177,26 @@ bool scene_intersect(const Vec3f &orig, const Vec3f &dir, const std::vector<Sphe
             material = boxes[i].material;
         }
     }
-      // ⚠️ 检测圆柱体
-    for (size_t i = 0; i < cylinders.size(); i++) {
+        for (size_t i = 0; i < cylinders.size(); i++) {
         float cyl_dist = std::numeric_limits<float>::max();
         if (cylinders[i].ray_intersect(orig, dir, cyl_dist) && cyl_dist < spheres_dist) {
             spheres_dist = cyl_dist;
             hit = orig + dir * cyl_dist;
             
-            // ⚠️ 新的法线计算：只算 X 和 Z，减去中心点
-            Vec3f local_hit = hit - cylinders[i].center;
-            N = Vec3f(local_hit.x, 0, local_hit.z).normalize();
+            // ⚠️ 新的法线计算逻辑
+            float min_y = cylinders[i].center.y - cylinders[i].half_height;
+            float max_y = cylinders[i].center.y + cylinders[i].half_height;
+            
+            // 判断打中的是盖子还是侧面（用极小的误差值判断）
+            if (fabs(hit.y - min_y) < 1e-4) {
+                N = Vec3f(0, -1, 0); // 打中下底面，法线朝下
+            } else if (fabs(hit.y - max_y) < 1e-4) {
+                N = Vec3f(0, 1, 0);  // 打中上顶面，法线朝上
+            } else {
+                // 打中侧面
+                Vec3f local_hit = hit - cylinders[i].center;
+                N = Vec3f(local_hit.x, 0, local_hit.z).normalize();
+            }
             
             material = cylinders[i].material;
         }
@@ -277,7 +317,7 @@ int main() {
     Material     mirror(1.0, Vec4f(0.0, 10.0, 0.8, 0.0), Vec3f(1.0, 1.0, 1.0), 1425.);
     std::vector<Sphere> spheres;
     
-    cylinders.push_back(Cylinder(Vec3f(-4.5f, 0.0f, -13.0f), 1.2f, cyl_mat));
+    cylinders.push_back(Cylinder(Vec3f(-5.5f, -1.0f, -14.0f), 1.2f, 2.0f, cyl_mat));
     boxes.push_back(Box(Vec3f(2.0, -2.0, -12.0), Vec3f(5.0, 1.0, -9.0), my_box_mat));
     spheres.push_back(Sphere(Vec3f(-3,    0,   -16), 2,      ivory));
     spheres.push_back(Sphere(Vec3f(-1.0, -1.5, -12), 2,      glass));
